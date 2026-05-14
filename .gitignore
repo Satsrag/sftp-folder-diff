@@ -1,0 +1,15 @@
+node_modules/
+out/
+*.vsix
+.vscode-test/
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Editor
+*.log
+.idea/
+
+# Local user SFTP config (in case someone tests against the repo itself)
+.vscode/sftp-diff.json

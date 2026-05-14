@@ -1,0 +1,191 @@
+{
+  "name": "sftp-folder-diff",
+  "displayName": "SFTP Folder Diff",
+  "description": "Compare an entire local folder against a remote SFTP folder, view diffs, upload/download/delete files.",
+  "version": "0.6.0",
+  "publisher": "local-dev",
+  "engines": {
+    "vscode": "^1.75.0"
+  },
+  "categories": ["Other"],
+  "main": "./out/extension.js",
+  "activationEvents": [],
+  "contributes": {
+    "commands": [
+      {
+        "command": "sftpFolderDiff.configure",
+        "title": "SFTP Diff: Configure Connection"
+      },
+      {
+        "command": "sftpFolderDiff.compare",
+        "title": "SFTP Diff: Compare Folders Now",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "sftpFolderDiff.compareFolder",
+        "title": "SFTP Diff: Compare This Folder"
+      },
+      {
+        "command": "sftpFolderDiff.diffFile",
+        "title": "SFTP: Diff This File with Remote"
+      },
+      {
+        "command": "sftpFolderDiff.uploadFile",
+        "title": "SFTP: Upload This File to Remote"
+      },
+      {
+        "command": "sftpFolderDiff.downloadFile",
+        "title": "SFTP: Download This File from Remote"
+      },
+      {
+        "command": "sftpFolderDiff.uploadFolder",
+        "title": "SFTP: Upload This Folder to Remote"
+      },
+      {
+        "command": "sftpFolderDiff.downloadFolder",
+        "title": "SFTP: Download This Folder from Remote"
+      },
+      {
+        "command": "sftpFolderDiff.clearPassword",
+        "title": "SFTP Diff: Clear Session Password"
+      },
+      {
+        "command": "sftpFolderDiff.toggleMode",
+        "title": "SFTP Diff: Toggle Compare Mode (Fast/Content)",
+        "icon": "$(settings-gear)"
+      },
+      {
+        "command": "sftpFolderDiff.openDiff",
+        "title": "Open / View Diff"
+      },
+      {
+        "command": "sftpFolderDiff.upload",
+        "title": "Upload to Remote",
+        "icon": "$(cloud-upload)"
+      },
+      {
+        "command": "sftpFolderDiff.download",
+        "title": "Download from Remote",
+        "icon": "$(cloud-download)"
+      },
+      {
+        "command": "sftpFolderDiff.deleteLocal",
+        "title": "Delete Local",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "sftpFolderDiff.deleteRemote",
+        "title": "Delete Remote",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "sftpFolderDiff.showTable",
+        "title": "SFTP Diff: Show as Table",
+        "icon": "$(table)"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "sftpFolderDiff",
+          "title": "SFTP Folder Diff",
+          "icon": "$(diff)"
+        }
+      ]
+    },
+    "views": {
+      "sftpFolderDiff": [
+        {
+          "id": "sftpFolderDiff.tree",
+          "name": "Differences"
+        }
+      ]
+    },
+    "menus": {
+      "explorer/context": [
+        {
+          "command": "sftpFolderDiff.compareFolder",
+          "when": "explorerResourceIsFolder",
+          "group": "7_sftp@1"
+        },
+        {
+          "command": "sftpFolderDiff.uploadFolder",
+          "when": "explorerResourceIsFolder",
+          "group": "7_sftp@2"
+        },
+        {
+          "command": "sftpFolderDiff.downloadFolder",
+          "when": "explorerResourceIsFolder",
+          "group": "7_sftp@3"
+        },
+        {
+          "command": "sftpFolderDiff.diffFile",
+          "when": "!explorerResourceIsFolder",
+          "group": "7_sftp@1"
+        },
+        {
+          "command": "sftpFolderDiff.uploadFile",
+          "when": "!explorerResourceIsFolder",
+          "group": "7_sftp@2"
+        },
+        {
+          "command": "sftpFolderDiff.downloadFile",
+          "when": "!explorerResourceIsFolder",
+          "group": "7_sftp@3"
+        }
+      ],
+      "editor/title/context": [
+        { "command": "sftpFolderDiff.diffFile",     "group": "7_sftp@1" },
+        { "command": "sftpFolderDiff.uploadFile",   "group": "7_sftp@2" },
+        { "command": "sftpFolderDiff.downloadFile", "group": "7_sftp@3" }
+      ],
+      "editor/context": [
+        { "command": "sftpFolderDiff.diffFile",     "group": "7_sftp@1" },
+        { "command": "sftpFolderDiff.uploadFile",   "group": "7_sftp@2" },
+        { "command": "sftpFolderDiff.downloadFile", "group": "7_sftp@3" }
+      ],
+      "view/title": [
+        { "command": "sftpFolderDiff.compare", "when": "view == sftpFolderDiff.tree", "group": "navigation@1" },
+        { "command": "sftpFolderDiff.showTable", "when": "view == sftpFolderDiff.tree", "group": "navigation@2" },
+        { "command": "sftpFolderDiff.toggleMode", "when": "view == sftpFolderDiff.tree", "group": "navigation@3" }
+      ],
+      "view/item/context": [
+        { "command": "sftpFolderDiff.openDiff", "when": "view == sftpFolderDiff.tree && viewItem =~ /modified|localOnly|remoteOnly/", "group": "inline@1" },
+        { "command": "sftpFolderDiff.upload", "when": "view == sftpFolderDiff.tree && viewItem =~ /modified|localOnly/", "group": "inline@2" },
+        { "command": "sftpFolderDiff.download", "when": "view == sftpFolderDiff.tree && viewItem =~ /modified|remoteOnly/", "group": "inline@3" },
+        { "command": "sftpFolderDiff.deleteLocal", "when": "view == sftpFolderDiff.tree && viewItem == localOnly", "group": "1_modification" },
+        { "command": "sftpFolderDiff.deleteRemote", "when": "view == sftpFolderDiff.tree && viewItem == remoteOnly", "group": "1_modification" }
+      ]
+    },
+    "configuration": {
+      "title": "SFTP Folder Diff",
+      "properties": {
+        "sftpFolderDiff.compareMode": {
+          "type": "string",
+          "enum": ["fast", "content"],
+          "default": "fast",
+          "description": "fast = compare by size + mtime; content = compare by SHA-256 hash"
+        },
+        "sftpFolderDiff.ignore": {
+          "type": "array",
+          "default": ["node_modules", ".git", ".vscode", "dist", "out", ".DS_Store"],
+          "description": "Patterns to skip when scanning. Supports: bare names (e.g. 'node_modules' matches anywhere in tree), or globs with * ** ? (e.g. '*.log', '**/temp/*', 'build/cache'). Used if .vscode/sftp-diff.json has no 'exclude' field; otherwise that wins."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./"
+  },
+  "dependencies": {
+    "ssh2-sftp-client": "^10.0.3"
+  },
+  "devDependencies": {
+    "@types/node": "^18.0.0",
+    "@types/vscode": "^1.75.0",
+    "@types/ssh2-sftp-client": "^9.0.4",
+    "typescript": "^5.3.0"
+  }
+}
