@@ -3,7 +3,7 @@
   "displayName": "SFTP Folder Diff",
   "description": "Compare an entire local folder against a remote SFTP folder, view diffs, upload/download/delete files.",
   "version": "0.6.0",
-  "publisher": "local-dev",
+  "publisher": "satsrag",
   "repository": {
     "type": "git",
     "url": "https://github.com/Satsrag/sftp-folder-diff.git"
