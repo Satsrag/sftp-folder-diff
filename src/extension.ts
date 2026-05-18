@@ -4,14 +4,12 @@ import * as fs from 'fs';
 import { SftpService, SftpConfig } from './sftpService';
 import { DiffEngine, DiffEntry } from './diffEngine';
 import { DiffTreeProvider, DiffNode } from './treeView';
-import { DiffWebviewPanel } from './webviewPanel';
 
 const CONFIG_FILE = '.vscode/sftp-diff.json';
 
 let sftp: SftpService | null = null;
 let treeProvider: DiffTreeProvider;
 let lastDiff: DiffEntry[] = [];
-let _extensionUri: vscode.Uri;
 
 // In-memory only — never written to disk. Cleared on VSCode exit.
 let sessionPassword: string | undefined;
@@ -104,7 +102,6 @@ async function withTransferProgress(
 }
 
 export function activate(context: vscode.ExtensionContext) {
-  _extensionUri = context.extensionUri;
   treeProvider = new DiffTreeProvider();
   vscode.window.registerTreeDataProvider('sftpFolderDiff.tree', treeProvider);
 
@@ -124,7 +121,6 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand('sftpFolderDiff.download', downloadCmd),
     vscode.commands.registerCommand('sftpFolderDiff.deleteLocal', deleteLocalCmd),
     vscode.commands.registerCommand('sftpFolderDiff.deleteRemote', deleteRemoteCmd),
-    vscode.commands.registerCommand('sftpFolderDiff.showTable', showTableCmd),
   );
 }
 
@@ -295,7 +291,6 @@ async function compareCmd(subFolderAbs?: string) {
         );
         lastDiff = result;
         treeProvider.setData(lastDiff, localBase, remoteBase);
-        DiffWebviewPanel.refresh(lastDiff);
       } catch (e: any) {
         if (token.isCancellationRequested) {
           cancelled = true;
@@ -694,17 +689,4 @@ async function deleteRemoteCmd(node: DiffNode) {
 function removeEntry(entry: DiffEntry) {
   lastDiff = lastDiff.filter(e => e.relPath !== entry.relPath);
   treeProvider.refreshAfterChange(lastDiff);
-  DiffWebviewPanel.refresh(lastDiff);
-}
-
-async function showTableCmd() {
-  if (lastDiff.length === 0) {
-    const pick = await vscode.window.showInformationMessage(
-      'No diff data yet. Run compare first?', 'Compare Now', 'Cancel'
-    );
-    if (pick === 'Compare Now') {
-      await compareCmd();
-    }
-  }
-  DiffWebviewPanel.show(_extensionUri, lastDiff);
 }

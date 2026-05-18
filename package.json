@@ -81,11 +81,6 @@
         "command": "sftpFolderDiff.deleteRemote",
         "title": "Delete Remote",
         "icon": "$(trash)"
-      },
-      {
-        "command": "sftpFolderDiff.showTable",
-        "title": "SFTP Diff: Show as Table",
-        "icon": "$(table)"
       }
     ],
     "viewsContainers": {
@@ -150,8 +145,7 @@
       ],
       "view/title": [
         { "command": "sftpFolderDiff.compare", "when": "view == sftpFolderDiff.tree", "group": "navigation@1" },
-        { "command": "sftpFolderDiff.showTable", "when": "view == sftpFolderDiff.tree", "group": "navigation@2" },
-        { "command": "sftpFolderDiff.toggleMode", "when": "view == sftpFolderDiff.tree", "group": "navigation@3" }
+        { "command": "sftpFolderDiff.toggleMode", "when": "view == sftpFolderDiff.tree", "group": "navigation@2" }
       ],
       "view/item/context": [
         { "command": "sftpFolderDiff.openDiff", "when": "view == sftpFolderDiff.tree && viewItem =~ /modified|localOnly|remoteOnly/", "group": "inline@1" },
