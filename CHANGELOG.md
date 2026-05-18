@@ -2,6 +2,13 @@
 
 All notable changes are documented here. This project loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.8.1] – 2026-05-18
+
+### Added
+- **Folder upload/download — byte-level progress + cancellable.** The old spinner-only UX is replaced with a real progress notification: `N/M files · X / Y · pct% · current/file/path`. Click the ✕ on the notification to abort; the file currently transferring finishes (`fastPut`/`fastGet` has no cancel hook), but no further files are started, and previously transferred files are not rolled back.
+- **`exclude` is now honored on folder upload/download.** Same precedence as compare: `exclude` from `.vscode/sftp-diff.json` wins if non-empty, otherwise falls back to the workspace `sftpFolderDiff.ignore` setting. Closes the long-standing "Known gap" — `uploadDir` / `downloadDir` now walk the tree themselves (instead of delegating to ssh2-sftp-client's built-in) so `node_modules`, `.git`, `*.log`, etc. are properly skipped.
+- **Per-file failure isolation.** A single file failing (permission, transient SFTP error, etc.) no longer aborts the whole folder transfer. The loop continues and the final toast reports `N uploaded, M failed` with the first error inline.
+
 ## [0.8.0] – 2026-05-18
 
 ### Added

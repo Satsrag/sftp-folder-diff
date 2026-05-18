@@ -20,8 +20,9 @@ A VSCode extension that compares an **entire local folder** against a **remote S
   - Folder: Compare / Upload Folder / Download Folder
   - Editor tab and editor area menus too
 - **Friendly progress** — byte-level percentage on single-file transfers, animated spinner with elapsed time on directory transfers, phased messages during compare (`Scanning local... → Scanning remote... → Comparing... → Hashing 142/1530`)
-- **Cancellable compare** — click the ✕ on the progress notification to abort; previous results are kept
+- **Cancellable compare + folder transfer** — click the ✕ on the progress notification to abort; previous results are kept (compare) or partial transfers are preserved (folder upload/download)
 - **Auto-reveal results** — compare jumps straight to the diff sidebar on completion, no extra click
+- **Folder transfer progress** — recursive upload/download shows `N/M files · X / Y · pct% · current/path` and honors the same `exclude` rules as compare
 - **glob exclude** — supports `*`, `**`, `?`, bare names, exact paths
 - **Temporary password** — if config has no password, you're prompted once per session and it stays in memory only
 
@@ -109,7 +110,6 @@ This is a beta. Working: everything listed above. Known not implemented:
 
 - Symlinks are skipped
 - Only the first workspace folder is used
-- Recursive directory upload/download don't honor `exclude` (built-in ssh2-sftp-client limitation; would need a custom walker)
 - No file watcher / auto-compare
 - No bulk "upload all modified" / "download all"
 

@@ -51,7 +51,7 @@ The whole extension is 6 files in `src/`. The interesting cross-file invariants:
 
 **Exclude resolution**: `cfg.exclude` from `.vscode/sftp-diff.json` wins if non-empty; otherwise fall back to VSCode setting `sftpFolderDiff.ignore`. Matching is delegated to `globMatcher.ts` — a zero-dep matcher that supports `*`, `**`, `?`, exact paths, and **bare names match any path segment** (gitignore-style: `node_modules` matches `src/node_modules/x`).
 
-**Known gap**: recursive folder upload/download (`uploadDir` / `downloadDir`) uses ssh2-sftp-client's built-ins and **does not honor `exclude`**. Don't promise it does. Fixing would require writing a custom walker on top of `sftpService.list` + `fastPut`/`fastGet`.
+**Recursive folder transfer** (`uploadDir` / `downloadDir` in `sftpService.ts`) replaces ssh2-sftp-client's built-ins with an in-house walker so it can honor the same `exclude` rules as compare, report per-file progress, and cooperate with a cancellation token. The walker enumerates files first (cheap synchronous local walk, or per-directory SFTP `list` on download), then loops `fastPut`/`fastGet` one file at a time, polling `options.cancelled()` between files. The currently-uploading file is not aborted mid-transfer (ssh2 doesn't expose a cancel hook on `fastPut`/`fastGet`). Individual file failures are collected into `DirTransferResult.errors` instead of aborting the loop; the caller decides whether to toast a warning vs an info.
 
 ## Security-sensitive design — don't break this
 
