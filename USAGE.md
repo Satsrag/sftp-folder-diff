@@ -1,20 +1,24 @@
-# SFTP Folder Diff v0.3.0 — 安装和使用说明 / Install & Usage Guide
+# SFTP Folder Diff v0.8.0 — 安装和使用说明 / Install & Usage Guide
 
 ## 包含 / What's Included
 
-- `sftp-folder-diff-0.3.0.vsix` —— 可直接安装的插件包(已含所有依赖)
-  `sftp-folder-diff-0.3.0.vsix` — ready-to-install extension package (all deps bundled)
+- `sftp-folder-diff-0.8.0.vsix` —— 可直接安装的插件包(已含所有依赖)
+  `sftp-folder-diff-0.8.0.vsix` — ready-to-install extension package (all deps bundled)
 - `sftp-folder-diff-source.zip` —— 完整源码
   `sftp-folder-diff-source.zip` — full source code
 
-## v0.3.0 新增 / What's New in v0.3.0
+## v0.8.0 新增 / What's New in v0.8.0
 
-- **`exclude` 配置** 支持 glob 模式(`*.log`、`**/temp/*` 等),可写在 `.vscode/sftp-diff.json` 里(优先)或 VSCode 设置 `sftpFolderDiff.ignore`(后备)
-  **`exclude` config** with glob support (`*.log`, `**/temp/*`, etc.), writable in `.vscode/sftp-diff.json` (priority) or the VSCode setting `sftpFolderDiff.ignore` (fallback)
-- **临时密码** 配置文件里没填 `password` 也没 `privateKeyPath` 时,比较时弹输入框,**只保存在内存里**,VSCode 关闭即失效,绝不写盘
-  **Temporary password** — when neither `password` nor `privateKeyPath` is set, you get an input prompt at compare time. **Held in memory only**, cleared when VSCode closes, never written to disk
-- **右键比较子目录** 资源管理器里任意文件夹上右键 → **SFTP Diff: Compare This Folder**,只比较那一个子树
-  **Right-click subfolder compare** — right-click any folder in Explorer → **SFTP Diff: Compare This Folder** to scope the diff to just that subtree
+- **多 target 配置** 顶层 JSON 数组,一份 config 同时配多个 SFTP server + 多个 local↔remote 映射,每个 target 独立比较、独立连接、独立差异列表
+  **Multi-target config** — top-level JSON array; one config covers multiple SFTP servers and multiple local↔remote mappings; each target compares, connects, and tracks diffs independently
+- **每个 target 单独 ↻** 侧边栏每个 target 一行,行末 ↻ 按钮触发该 target 的比较;右键 target 行可清空差异或断开连接
+  **Per-target ↻** — each target gets its own sidebar row with an inline ↻ button; right-click a target row to clear its diff or disconnect its SFTP session
+- **右键路径自动匹配 target** 文件/文件夹右键 → diff/upload/download 时,通过路径反查所属 target,无需手动选
+  **Right-click path auto-dispatch** — file/folder right-click actions resolve the owning target from the path automatically; no QuickPick
+- **config 热重载** 编辑 `.vscode/sftp-diff.json` 自动重载 targets;校验失败保留旧状态 + toast 提示
+  **Config hot reload** — editing `.vscode/sftp-diff.json` reloads targets without a window restart; validation failures preserve prior state + show a toast
+- **破坏性变化**:旧的单对象 schema 不再支持(裸对象 → 数组);WebView 表格视图整体移除;侧边栏标题栏的 ↻ 全局刷新按钮移除
+  **Breaking changes:** the old single-object schema is no longer supported (wrap in `[ ... ]`); the WebView table view is removed; the title-bar global ↻ refresh button is removed
 
 ---
 
@@ -22,14 +26,14 @@
 
 ### 图形界面 / GUI
 
-VSCode 扩展面板(`Ctrl+Shift+X` / `Cmd+Shift+X`) → 右上角 `...` → **从 VSIX 安装...** → 选 `sftp-folder-diff-0.3.0.vsix`。
+VSCode 扩展面板(`Ctrl+Shift+X` / `Cmd+Shift+X`) → 右上角 `...` → **从 VSIX 安装...** → 选 `sftp-folder-diff-0.8.0.vsix`。
 
-VSCode Extensions panel (`Ctrl+Shift+X` / `Cmd+Shift+X`) → top-right `...` → **Install from VSIX...** → pick `sftp-folder-diff-0.3.0.vsix`.
+VSCode Extensions panel (`Ctrl+Shift+X` / `Cmd+Shift+X`) → top-right `...` → **Install from VSIX...** → pick `sftp-folder-diff-0.8.0.vsix`.
 
 ### 命令行 / Command line
 
 ```bash
-code --install-extension sftp-folder-diff-0.3.0.vsix
+code --install-extension sftp-folder-diff-0.8.0.vsix
 ```
 
 ### 升级覆盖 / Upgrading
@@ -47,31 +51,33 @@ If you had 0.1.0 installed, just install the new vsix — VSCode will replace it
 Open your local project → Command Palette (`Ctrl+Shift+P`) → **SFTP Diff: Configure Connection** → edit the generated `.vscode/sftp-diff.json`:
 
 ```jsonc
-{
-  "host": "example.com",
-  "port": 22,
-  "username": "user",
-  "password": "",                  // 留空或删掉 → 比较时会弹输入框 / leave empty or remove → prompted at compare time
-  "privateKeyPath": "",            // 想用私钥就填路径,会优先于密码 / set this to use a private key (takes precedence over password)
-  "remotePath": "/var/www/project",
-  "localPath": ".",
-  "exclude": [
-    "node_modules",
-    ".git",
-    ".vscode",
-    "dist",
-    "out",
-    ".DS_Store",
-    "*.log",
-    "**/temp/*"
-  ]
-}
+[
+  {
+    "name": "api",
+    "host": "example.com",
+    "port": 22,
+    "username": "user",
+    "password": "",
+    "privateKeyPath": "",
+    "remotePath": "/var/www/api",
+    "localPath": "./api",
+    "exclude": ["node_modules", ".git", ".vscode", "dist", "out"]
+  },
+  {
+    "name": "widget",
+    "host": "example.com",
+    "username": "user",
+    "remotePath": "/var/www/widget",
+    "localPath": "./widget"
+  }
+]
 ```
 
 ### 字段一览 / Field Reference
 
 | 字段 / Field | 必填 / Required | 说明 / Description |
 |---|---|---|
+| `name` | ✅ | 唯一标识,在侧边栏展示 / Unique identifier, shown in the sidebar |
 | `host` | ✅ | SFTP 服务器地址 / SFTP server address |
 | `port` | | 默认 22 / Default 22 |
 | `username` | ✅ | 登录用户名 / Login username |
@@ -80,6 +86,10 @@ Open your local project → Command Palette (`Ctrl+Shift+P`) → **SFTP Diff: Co
 | `remotePath` | ✅ | 远程根目录(绝对路径) / Remote root directory (absolute path) |
 | `localPath` | | 本地根目录,相对 workspace,默认 `.` / Local root, relative to workspace, defaults to `.` |
 | `exclude` | | 扫描时跳过的 glob 模式数组(下面专门讲) / Glob patterns to skip during scan (details below) |
+
+> **多 target / Multi-target:** 文件顶层是 JSON 数组,每个对象一组完整配置。`name` 必填且全局唯一,`localPath` 在不同 target 间不能相互包含 (`./api` 与 `./api/sub` 不允许同存)。
+>
+> **Multi-target:** the file is a top-level JSON array; each element is an independent target. `name` is required and globally unique; `localPath` values must not be ancestors of one another (e.g. `./api` and `./api/sub` cannot coexist).
 
 ### 安全建议 / Security Tips
 
@@ -199,9 +209,8 @@ The notification includes `(scope: src/components)` so you can confirm the range
 
 | 入口 / Entry point | 比较范围 / Scope |
 |---|---|
-| 活动栏 diff 图标 → 标题栏 🔄 刷新 / Activity bar diff icon → title bar 🔄 refresh | 整个 `localPath` ↔ `remotePath` / Entire `localPath` ↔ `remotePath` |
-| 命令面板 → `SFTP Diff: Compare Folders Now` / Command Palette → `SFTP Diff: Compare Folders Now` | 同上 / Same as above |
-| 资源管理器右键文件夹 → `Compare This Folder` / Explorer right-click folder → `Compare This Folder` | 仅该子目录 / That subfolder only |
+| 侧边栏 target 行的 ↻ 按钮 / ↻ button on a target row | 该 target 的 `localPath` ↔ `remotePath` |
+| 资源管理器右键文件夹 → `Compare This Folder` / Explorer right-click folder | 自动匹配到该路径所属 target 的子树 / Auto-matched to the owning target |
 
 ### 三种比较模式 / Three compare modes
 
@@ -240,31 +249,7 @@ When a compare succeeds, the SFTP Folder Diff sidebar auto-focuses to the differ
 
 ---
 
-## 七、两种视图 / 7. Two Views
-
-**树形侧边栏视图**(默认): / **Tree sidebar view** (default):
-- 按目录结构展开,类似 Git 资源管理器
-  Expands by directory structure, like the Git Source Control panel
-- 点 `M` 文件 → 打开 VSCode 原生 diff 编辑器(左远程 / 右本地)
-  Click an `M` file → opens VSCode's native diff editor (Remote on the left / Local on the right)
-- 悬停时右侧出现内联图标:diff / ↑上传 / ↓下载 / 🗑删除
-  On hover, inline icons appear on the right: diff / ↑ upload / ↓ download / 🗑 delete
-
-**WebView 表格视图**: / **WebView table view**:
-- 一张完整表格:状态 / 路径 / 远程 size+mtime / 本地 size+mtime / 操作按钮
-  Full table: status / path / remote size+mtime / local size+mtime / action buttons
-- 顶部 `↻ Re-compare` 按钮 + 数量统计
-  Top `↻ Re-compare` button + count summary
-- 右上角实时模糊过滤输入框
-  Live fuzzy filter input in the top-right corner
-
-打开:树视图标题栏 📋 图标,或命令 `SFTP Diff: Show as Table`。两个视图共享数据,操作互相同步。
-
-To open: 📋 icon in the tree view title bar, or command `SFTP Diff: Show as Table`. The two views share data and stay in sync after every operation.
-
----
-
-## 八、操作按钮 / 8. Action Buttons
+## 七、操作按钮 / 7. Action Buttons
 
 | 按钮 / Button | 行为 / Action | 适用状态 / Applies to |
 |---|---|---|
@@ -276,20 +261,21 @@ To open: 📋 icon in the tree view title bar, or command `SFTP Diff: Show as Ta
 
 ---
 
-## 九、命令清单 / 9. Command List
+## 八、命令清单 / 8. Command List
 
 | 命令 / Command | 作用 / What it does |
 |---|---|
 | `SFTP Diff: Configure Connection` | 创建/打开 `.vscode/sftp-diff.json` / Create/open `.vscode/sftp-diff.json` |
-| `SFTP Diff: Compare Folders Now` | 比较整个 localPath ↔ remotePath / Compare the whole localPath ↔ remotePath |
+| `SFTP Diff: Compare This Target` | 侧边栏 ↻ 按钮触发,比较单个 target / Per-target ↻ in sidebar |
+| `SFTP Diff: Clear Diff for This Target` | 右键 target 行,清掉差异列表 / Right-click target row, clear its diff list |
+| `SFTP Diff: Disconnect This Target` | 右键 target 行,断开 SFTP / Right-click target row, disconnect SFTP |
 | `SFTP Diff: Compare This Folder` | 比较右键选中的子目录(也可命令面板调用 — 但需 URI) / Compare a right-clicked subfolder (callable from Command Palette too — needs a URI) |
-| `SFTP Diff: Show as Table` | 打开 WebView 表格视图 / Open the WebView table view |
 | `SFTP Diff: Toggle Compare Mode (Fast/Smart/Content)` | 循环切换比较模式 / Cycle through compare modes |
 | `SFTP Diff: Clear Session Password` | 清掉内存里的临时密码并断开连接 / Clear the in-memory temporary password and disconnect |
 
 ---
 
-## 十、自定义配置 / 10. Custom Settings
+## 九、自定义配置 / 9. Custom Settings
 
 `Ctrl+,` 搜 `sftpFolderDiff`:
 
@@ -301,7 +287,7 @@ To open: 📋 icon in the tree view title bar, or command `SFTP Diff: Show as Ta
 
 ---
 
-## 十一、常见问题 / 11. FAQ
+## 十、常见问题 / 10. FAQ
 
 **Q: 临时密码下,VSCode 重启后会问几次?**
 **Q: With temporary passwords, how often does VSCode ask after a restart?**
@@ -335,7 +321,7 @@ A: VSCode Extensions panel → find SFTP Folder Diff → gear icon → Install A
 
 ---
 
-## 十二、改源码 / 12. Modifying the Source
+## 十一、改源码 / 11. Modifying the Source
 
 ```bash
 unzip sftp-folder-diff-source.zip
@@ -362,7 +348,7 @@ src/
 ├── diffEngine.ts     # 递归扫描 + 三路对比 / recursive scan + 3-way comparison
 ├── globMatcher.ts    # exclude 用的极简 glob 匹配器(无依赖) / minimal glob matcher for `exclude` (zero deps)
 ├── treeView.ts       # 侧边栏树形视图 / sidebar tree view
-└── webviewPanel.ts   # 主编辑区 WebView 表格视图 / main-editor-area WebView table view
+└── targetRegistry.ts # 每个 target 的状态管理 / per-target state management
 ```
 
 ---

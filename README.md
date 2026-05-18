@@ -12,11 +12,10 @@ A VSCode extension that compares an **entire local folder** against a **remote S
   - `smart` *(default)* — size + mtime first; falls back to SHA-256 only when mtime drifts. Fast for the common case, accurate for the rest
   - `content` — by SHA-256 hash unconditionally (accurate, slower; downloads remote files for hashing)
 - **Auto-reconnect** — survives idle SFTP disconnects with a keepalive + transparent retry, so long compares and follow-up actions don't fail mid-run
-- **Two views**, sharing the same diff data
-  - Sidebar tree view (like Git Source Control)
-  - WebView table view with size/mtime side-by-side, color badges, live path filter
-- **Inline actions** per file: Diff / Upload / Download / Delete
-- **Right-click anywhere** for single-file or folder operations
+- **Multi-target** — configure several SFTP servers + local↔remote mappings in one `.vscode/sftp-diff.json`; each target gets its own row in the sidebar and its own diff state
+- **Per-target sidebar tree** — single source of truth, target nodes expand into nested folder/file diffs
+- **Inline actions** per target (↻ recompare) and per file (Diff / Upload / Download / Delete)
+- **Right-click anywhere** for single-file or folder operations; the target is auto-resolved from the path
   - File: Diff with Remote / Upload / Download
   - Folder: Compare / Upload Folder / Download Folder
   - Editor tab and editor area menus too
@@ -30,29 +29,37 @@ A VSCode extension that compares an **entire local folder** against a **remote S
 
 1. Install the `.vsix` from [Releases](../../releases)
    ```bash
-   code --install-extension sftp-folder-diff-0.7.1.vsix
+   code --install-extension sftp-folder-diff-0.8.0.vsix
    ```
 2. Open your local project
 3. Run command `SFTP Diff: Configure Connection`, fill in `.vscode/sftp-diff.json`
-4. Click the diff icon in the activity bar → click the refresh button
+4. Click the diff icon in the activity bar → click the ↻ button on each target row to run that target's compare. Or right-click a file/folder under any target's `localPath` to invoke per-file SFTP actions.
 
 ## Configuration
 
 `.vscode/sftp-diff.json`:
 
 ```jsonc
-{
-  "host": "example.com",
-  "port": 22,
-  "username": "user",
-  "password": "",                  // leave empty → prompted at runtime
-  "privateKeyPath": "",            // takes precedence over password
-  "remotePath": "/var/www/project",
-  "localPath": ".",
-  "exclude": [
-    "node_modules", ".git", "*.log", "**/temp/*"
-  ]
-}
+[
+  {
+    "name": "api",
+    "host": "example.com",
+    "port": 22,
+    "username": "user",
+    "password": "",
+    "privateKeyPath": "",
+    "remotePath": "/var/www/api",
+    "localPath": "./api",
+    "exclude": ["node_modules", ".git", "*.log"]
+  },
+  {
+    "name": "widget",
+    "host": "example.com",
+    "username": "user",
+    "remotePath": "/var/www/widget",
+    "localPath": "./widget"
+  }
+]
 ```
 
 See [`USAGE.md`](./USAGE.md) for full docs, all commands, all settings, exclude syntax, security notes, troubleshooting.
@@ -62,11 +69,12 @@ See [`USAGE.md`](./USAGE.md) for full docs, all commands, all settings, exclude 
 | Command | What it does |
 |---|---|
 | `SFTP Diff: Configure Connection` | Create/open `.vscode/sftp-diff.json` |
-| `SFTP Diff: Compare Folders Now` | Compare whole `localPath` ↔ `remotePath` |
-| `SFTP Diff: Compare This Folder` | (Right-click) compare a subfolder only |
-| `SFTP Diff: Show as Table` | Open WebView table view |
+| `SFTP Diff: Compare This Target` | (Per-target ↻ in sidebar) compare one target's whole tree |
+| `SFTP Diff: Compare This Folder` | (Right-click) scope a compare to a subfolder; auto-resolves the target |
+| `SFTP Diff: Clear Diff for This Target` | (Right-click target row) wipes that target's diff list; doesn't re-compare |
+| `SFTP Diff: Disconnect This Target` | (Right-click target row) closes the SFTP connection for that target |
 | `SFTP Diff: Toggle Compare Mode` | Cycle through fast → smart → content |
-| `SFTP Diff: Clear Session Password` | Wipe the in-memory password |
+| `SFTP Diff: Clear Session Password` | Wipe in-memory passwords, disconnect all targets |
 | `SFTP: Diff This File with Remote` | (Right-click file or editor) |
 | `SFTP: Upload This File to Remote` | Same |
 | `SFTP: Download This File from Remote` | Same |
@@ -92,7 +100,7 @@ src/
 ├── diffEngine.ts      # recursive scan + 3-way comparison
 ├── globMatcher.ts     # minimal glob (zero deps)
 ├── treeView.ts        # sidebar tree
-└── webviewPanel.ts    # main-editor table view
+└── targetRegistry.ts  # per-target state (sftp, lastDiff, inFlight)
 ```
 
 ## Status & limitations

@@ -2,6 +2,46 @@
 
 All notable changes are documented here. This project loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.8.0] – 2026-05-18
+
+### Added
+- **Multi-target config.** `.vscode/sftp-diff.json` is now a top-level JSON array; each element is an independent SFTP target with its own server, credentials, local↔remote mapping, and exclude list. Each target requires a unique `name` and a `localPath` that does not overlap any other target's `localPath`.
+- **Per-target tree view.** The sidebar groups results by target. Each target row has an inline ↻ to recompare just that target, plus right-click actions `Clear Diff` and `Disconnect`. File-level inline actions (Diff / Upload / Download / Delete) work as before, scoped to their owning target.
+- **Right-click path dispatch.** Right-clicking a file or folder under any target's `localPath` automatically resolves to that target — no QuickPick.
+- **Config hot reload.** Editing `.vscode/sftp-diff.json` reloads targets without restarting the window. Parse/validation failures preserve the prior loaded state and toast the first error.
+- **Per-target same-target debounce.** Hitting ↻ a second time while a compare is running for that target shows a notice and ignores the second click. Different targets can compare concurrently.
+
+### Changed
+- **Breaking — config schema:** single-object configs from 0.7.x no longer load. Wrap your existing object in `[ { ... } ]` and add a `"name"` field. See migration snippet below.
+- **Breaking — WebView removed:** the table view (`▦` button and `SFTP Diff: Show as Table` command) is gone. The tree view is the only diff UI.
+- **Breaking — global Compare button removed:** the `↻` button on the sidebar title bar and the `SFTP Diff: Compare Folders Now` command are gone. Use the per-target ↻ on each target row, or right-click a folder under a target's local path.
+- Session passwords are now cached per `host:port:username` triple (shared across targets with the same credentials).
+
+### Migration
+
+```jsonc
+// Before (0.7.x)
+{
+  "host": "example.com",
+  "username": "user",
+  "remotePath": "/var/www",
+  "localPath": ".",
+  "exclude": ["node_modules"]
+}
+
+// After (0.8.0) — wrap in an array; add a name
+[
+  {
+    "name": "default",
+    "host": "example.com",
+    "username": "user",
+    "remotePath": "/var/www",
+    "localPath": ".",
+    "exclude": ["node_modules"]
+  }
+]
+```
+
 ## [0.7.1] – 2026-05-18
 
 ### Added
