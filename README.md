@@ -21,6 +21,8 @@ A VSCode extension that compares an **entire local folder** against a **remote S
   - Folder: Compare / Upload Folder / Download Folder
   - Editor tab and editor area menus too
 - **Friendly progress** — byte-level percentage on single-file transfers, animated spinner with elapsed time on directory transfers, phased messages during compare (`Scanning local... → Scanning remote... → Comparing... → Hashing 142/1530`)
+- **Cancellable compare** — click the ✕ on the progress notification to abort; previous results are kept
+- **Auto-reveal results** — compare jumps straight to the diff sidebar on completion, no extra click
 - **glob exclude** — supports `*`, `**`, `?`, bare names, exact paths
 - **Temporary password** — if config has no password, you're prompted once per session and it stays in memory only
 
@@ -28,7 +30,7 @@ A VSCode extension that compares an **entire local folder** against a **remote S
 
 1. Install the `.vsix` from [Releases](../../releases)
    ```bash
-   code --install-extension sftp-folder-diff-0.7.0.vsix
+   code --install-extension sftp-folder-diff-0.7.1.vsix
    ```
 2. Open your local project
 3. Run command `SFTP Diff: Configure Connection`, fill in `.vscode/sftp-diff.json`

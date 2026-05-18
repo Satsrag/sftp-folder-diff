@@ -2,6 +2,12 @@
 
 All notable changes are documented here. This project loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.7.1] – 2026-05-18
+
+### Added
+- **Cancellable compare** — the progress notification now shows a ✕ button; click it to abort a long compare. `DiffEngine.run` accepts a cancellation callback that is checked between phases, on every walked directory entry, and on each compare-loop iteration. Previous diff results are preserved on cancel.
+- **Auto-reveal results** — when a compare completes successfully the SFTP Folder Diff sidebar is automatically focused so results are visible without an extra activity-bar click. Cancellation and errors do not change the focus.
+
 ## [0.7.0] – 2026-05-18
 
 ### Added

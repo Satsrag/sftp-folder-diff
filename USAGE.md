@@ -226,6 +226,20 @@ Switch via: title bar ⚙️ icon (cycles `fast → smart → content → fast`)
 
 ---
 
+### 取消 / Cancelling
+
+比较过程中,通知右上角的 ✕ 按钮可中断比较。已经比较出来的差异不会丢,但本次跑的新数据会被丢弃,列表保留上一次的结果。content 模式下取消会等当前文件 hash 完才停(单文件级粒度)。
+
+While a compare is running, click the ✕ in the top-right corner of the progress notification to abort. The previous diff list is preserved (the in-flight scan is discarded). In `content` mode, cancellation waits for the current file's hash to finish before stopping (per-file granularity).
+
+### 比较完自动跳转 / Auto-reveal on completion
+
+比较成功完成后,SFTP Folder Diff 侧边栏会自动展开并聚焦到差异树,不用再手动点活动栏图标。取消或失败时不跳转,保留你当前的视图。
+
+When a compare succeeds, the SFTP Folder Diff sidebar auto-focuses to the differences tree — no need to click the activity bar icon. Cancellation or errors do not change the focus, so your current view is preserved.
+
+---
+
 ## 七、两种视图 / 7. Two Views
 
 **树形侧边栏视图**(默认): / **Tree sidebar view** (default):
