@@ -1,10 +1,11 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
-import { SftpService, SftpConfig } from './sftpService';
+import { SftpService, SftpConfig, DirTransferResult } from './sftpService';
 import { DiffEngine, DiffEntry } from './diffEngine';
 import { DiffTreeProvider, DiffNode } from './treeView';
 import { TargetRegistry, Target } from './targetRegistry';
+import { GlobMatcher } from './globMatcher';
 
 const CONFIG_FILE = '.vscode/sftp-diff.json';
 
@@ -12,32 +13,21 @@ let treeProvider: DiffTreeProvider;
 let registry: TargetRegistry;
 let watcher: vscode.FileSystemWatcher | undefined;
 
-/* ---------- progress helpers (unchanged from 0.7.1) ---------- */
-
-async function withSpinnerProgress(title: string, work: () => Promise<void>): Promise<void> {
-  await vscode.window.withProgress(
-    { location: vscode.ProgressLocation.Notification, title, cancellable: false },
-    async (progress) => {
-      const frames = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
-      let i = 0;
-      const start = Date.now();
-      const timer = setInterval(() => {
-        const elapsed = Math.floor((Date.now() - start) / 1000);
-        const mm = Math.floor(elapsed / 60).toString().padStart(2, '0');
-        const ss = (elapsed % 60).toString().padStart(2, '0');
-        progress.report({ message: `${frames[i++ % frames.length]} working...  ${mm}:${ss} elapsed` });
-      }, 120);
-      try { await work(); } finally { clearInterval(timer); }
-      progress.report({ message: '✓ done' });
-    }
-  );
-}
+/* ---------- progress helpers ---------- */
 
 function fmtBytes(n: number): string {
   if (n < 1024) return n + ' B';
   if (n < 1024 * 1024) return (n / 1024).toFixed(1) + ' KB';
   if (n < 1024 * 1024 * 1024) return (n / 1024 / 1024).toFixed(1) + ' MB';
   return (n / 1024 / 1024 / 1024).toFixed(2) + ' GB';
+}
+
+function truncMid(s: string, max: number): string {
+  if (s.length <= max) return s;
+  const keep = max - 1;
+  const left = Math.ceil(keep / 2);
+  const right = Math.floor(keep / 2);
+  return s.slice(0, left) + '…' + s.slice(s.length - right);
 }
 
 async function withTransferProgress(
@@ -478,6 +468,87 @@ async function downloadFileCmd(uri?: vscode.Uri) {
   }
 }
 
+/**
+ * Resolve the effective exclude matcher for a folder transfer.
+ * Same precedence as compare: cfg.exclude wins if non-empty,
+ * otherwise fall back to the workspace setting.
+ */
+function buildExcludeMatcher(target: Target): GlobMatcher {
+  const patterns = (target.config.exclude && target.config.exclude.length > 0)
+    ? target.config.exclude
+    : vscode.workspace.getConfiguration('sftpFolderDiff').get<string[]>('ignore', []);
+  return new GlobMatcher(patterns);
+}
+
+/**
+ * Run a directory transfer (upload OR download) with a cancellable progress
+ * notification. Both folder commands share this since the UX is identical:
+ * "N/M files · X / Y · pct% · current/rel/path".
+ */
+async function runDirTransfer(opts: {
+  conn: SftpService;
+  title: string;
+  exclude: GlobMatcher;
+  work: (cb: { progress: (p: any) => void; cancelled: () => boolean }) => Promise<DirTransferResult>;
+}): Promise<DirTransferResult | undefined> {
+  let result: DirTransferResult | undefined;
+  try {
+    await vscode.window.withProgress(
+      {
+        location: vscode.ProgressLocation.Notification,
+        title: opts.title,
+        cancellable: true,
+      },
+      async (progress, token) => {
+        let lastTick = Date.now();
+        result = await opts.work({
+          progress: (p) => {
+            const now = Date.now();
+            // throttle to ~80 ms unless we're at the very end
+            if (now - lastTick < 80 && p.filesDone < p.filesTotal) return;
+            lastTick = now;
+            const pct = p.bytesTotal > 0 ? Math.floor((p.bytesDone / p.bytesTotal) * 100) : 0;
+            const fileLine = p.currentFile ? ` · ${truncMid(p.currentFile, 50)}` : '';
+            progress.report({
+              message: `${p.filesDone}/${p.filesTotal} files · ${fmtBytes(p.bytesDone)} / ${fmtBytes(p.bytesTotal)} · ${pct}%${fileLine}`,
+            });
+          },
+          cancelled: () => token.isCancellationRequested,
+        });
+      }
+    );
+  } catch (e: any) {
+    vscode.window.showErrorMessage(`${opts.title}: ${e?.message || e}`);
+    return undefined;
+  }
+  return result;
+}
+
+/**
+ * Format the final summary toast for a folder transfer. Combines counts,
+ * bytes, cancellation state, and failure info into one message.
+ */
+function summarizeDirResult(verb: string, targetName: string, scope: string, r: DirTransferResult): { kind: 'info' | 'warn'; text: string } {
+  const totalAttempted = r.filesTransferred + r.filesFailed;
+  if (r.cancelled) {
+    return {
+      kind: 'warn',
+      text: `${targetName}: ${verb} cancelled at ${r.filesTransferred}/${totalAttempted} files (${fmtBytes(r.bytesTransferred)}).${r.filesFailed ? ` ${r.filesFailed} failed.` : ''}`,
+    };
+  }
+  if (r.filesFailed > 0) {
+    const first = r.errors[0];
+    return {
+      kind: 'warn',
+      text: `${targetName}${scope}: ${r.filesTransferred} ${verb}, ${r.filesFailed} failed (${fmtBytes(r.bytesTransferred)}). First error: ${first.relPath}: ${first.error}`,
+    };
+  }
+  return {
+    kind: 'info',
+    text: `${targetName}${scope}: ${verb} ${r.filesTransferred} files (${fmtBytes(r.bytesTransferred)}).`,
+  };
+}
+
 async function uploadFolderCmd(uri?: vscode.Uri) {
   if (!uri) { vscode.window.showErrorMessage('No folder selected.'); return; }
   const local = uri.fsPath;
@@ -491,7 +562,7 @@ async function uploadFolderCmd(uri?: vscode.Uri) {
   if (!mapped) return;
 
   const ok = await vscode.window.showWarningMessage(
-    `Upload folder to ${target.config.name}? This may overwrite files.\nLocal:  ${local}\nRemote: ${mapped.remoteAbs}`,
+    `Upload folder to ${target.config.name}? This may overwrite files. exclude rules will be honored.\nLocal:  ${local}\nRemote: ${mapped.remoteAbs}`,
     { modal: true }, 'Upload'
   );
   if (ok !== 'Upload') return;
@@ -500,12 +571,28 @@ async function uploadFolderCmd(uri?: vscode.Uri) {
   try { conn = await registry.getOrConnectSftp(target); }
   catch (e: any) { vscode.window.showErrorMessage(`${target.config.name}: ${e?.message || e}`); return; }
 
-  try {
-    await withSpinnerProgress(`Uploading folder · ${target.config.name} · ${path.basename(local)}`, () => conn.uploadDir(local, mapped.remoteAbs));
-    vscode.window.showInformationMessage(`Folder uploaded to ${target.config.name}: ${mapped.relPath || path.basename(local)}`);
-  } catch (e: any) {
-    vscode.window.showErrorMessage(`Folder upload failed: ${e.message}`);
-  }
+  const matcher = buildExcludeMatcher(target);
+  // Exclude paths are scoped to the folder being uploaded — match relPath against the
+  // matcher built from full target exclude patterns. The matcher handles bare-name
+  // (any segment) + glob; works whether we pass "node_modules/foo/bar" or "foo/bar"
+  // because bare-name segments match anywhere.
+
+  const result = await runDirTransfer({
+    conn,
+    title: `Uploading folder · ${target.config.name} · ${path.basename(local)}`,
+    exclude: matcher,
+    work: ({ progress, cancelled }) => conn.uploadDir(local, mapped.remoteAbs, {
+      exclude: (rel) => matcher.ignores(rel),
+      progress,
+      cancelled,
+    }),
+  });
+  if (!result) return;
+
+  const scopeNote = mapped.relPath ? ` (${mapped.relPath})` : '';
+  const s = summarizeDirResult('uploaded', target.config.name, scopeNote, result);
+  if (s.kind === 'warn') vscode.window.showWarningMessage(s.text);
+  else vscode.window.showInformationMessage(s.text);
 }
 
 async function downloadFolderCmd(uri?: vscode.Uri) {
@@ -521,7 +608,7 @@ async function downloadFolderCmd(uri?: vscode.Uri) {
   if (!mapped) return;
 
   const ok = await vscode.window.showWarningMessage(
-    `Download folder from ${target.config.name}? This may overwrite local files.\nRemote: ${mapped.remoteAbs}\nLocal:  ${local}`,
+    `Download folder from ${target.config.name}? This may overwrite local files. exclude rules will be honored.\nRemote: ${mapped.remoteAbs}\nLocal:  ${local}`,
     { modal: true }, 'Download'
   );
   if (ok !== 'Download') return;
@@ -530,12 +617,24 @@ async function downloadFolderCmd(uri?: vscode.Uri) {
   try { conn = await registry.getOrConnectSftp(target); }
   catch (e: any) { vscode.window.showErrorMessage(`${target.config.name}: ${e?.message || e}`); return; }
 
-  try {
-    await withSpinnerProgress(`Downloading folder · ${target.config.name} · ${path.basename(local)}`, () => conn.downloadDir(mapped.remoteAbs, local));
-    vscode.window.showInformationMessage(`Folder downloaded from ${target.config.name}: ${mapped.relPath || path.basename(local)}`);
-  } catch (e: any) {
-    vscode.window.showErrorMessage(`Folder download failed: ${e.message}`);
-  }
+  const matcher = buildExcludeMatcher(target);
+
+  const result = await runDirTransfer({
+    conn,
+    title: `Downloading folder · ${target.config.name} · ${path.basename(local)}`,
+    exclude: matcher,
+    work: ({ progress, cancelled }) => conn.downloadDir(mapped.remoteAbs, local, {
+      exclude: (rel) => matcher.ignores(rel),
+      progress,
+      cancelled,
+    }),
+  });
+  if (!result) return;
+
+  const scopeNote = mapped.relPath ? ` (${mapped.relPath})` : '';
+  const s = summarizeDirResult('downloaded', target.config.name, scopeNote, result);
+  if (s.kind === 'warn') vscode.window.showWarningMessage(s.text);
+  else vscode.window.showInformationMessage(s.text);
 }
 
 /* ---------- tree-node commands (act on a DiffNode that carries .entry) ---------- */

@@ -1,4 +1,5 @@
 import * as fs from 'fs';
+import * as path from 'path';
 import Client = require('ssh2-sftp-client');
 
 export interface SftpConfig {
@@ -20,6 +21,33 @@ export interface RemoteEntry {
 }
 
 export type TransferStep = (transferred: number, total: number) => void;
+
+export interface DirTransferProgress {
+  filesDone: number;
+  filesTotal: number;
+  bytesDone: number;
+  bytesTotal: number;
+  currentFile: string;
+}
+
+export interface DirTransferOptions {
+  /** Return true to skip a path (relative to the transfer root, posix). */
+  exclude?: (relPath: string) => boolean;
+  progress?: (info: DirTransferProgress) => void;
+  /** Polled between files; if true, the loop exits early with cancelled=true. */
+  cancelled?: () => boolean;
+}
+
+export interface DirTransferResult {
+  filesTransferred: number;
+  filesFailed: number;
+  bytesTransferred: number;
+  errors: Array<{ relPath: string; error: string }>;
+  cancelled: boolean;
+}
+
+interface LocalFileForUpload { relPath: string; localAbs: string; size: number; }
+interface RemoteFileForDownload { relPath: string; remoteAbs: string; size: number; }
 
 export class SftpService {
   private client = new Client();
@@ -87,21 +115,159 @@ export class SftpService {
     await this.run(() => this.client.delete(remotePath));
   }
 
-  /** Upload a whole local directory to remote, recursively. */
-  async uploadDir(localDir: string, remoteDir: string): Promise<void> {
-    return this.run(async () => {
-      const exists = await this.client.exists(remoteDir);
-      if (!exists) await this.client.mkdir(remoteDir, true);
-      await this.client.uploadDir(localDir, remoteDir);
+  /**
+   * Upload a local directory recursively, file-by-file. Replaces the
+   * ssh2-sftp-client built-in so we can:
+   *   - honor an `exclude` predicate (glob/gitignore-style, callers' choice),
+   *   - report per-file progress (filesDone/filesTotal + bytesDone/bytesTotal + currentFile),
+   *   - cooperate with a cancellation token (checked between files; the file
+   *     currently uploading is not interrupted mid-transfer because fastPut
+   *     does not expose a cancel hook).
+   * Returns a result describing what was transferred / skipped / failed.
+   */
+  async uploadDir(
+    localDir: string,
+    remoteDir: string,
+    options: DirTransferOptions = {},
+  ): Promise<DirTransferResult> {
+    const exclude = options.exclude ?? (() => false);
+
+    // Phase 1: walk local tree to enumerate files (synchronous, no SFTP yet).
+    const files: LocalFileForUpload[] = [];
+    this.walkLocalForUpload(localDir, '', exclude, files);
+    const bytesTotal = files.reduce((s, f) => s + f.size, 0);
+
+    const emptyResult = (cancelled: boolean, filesDone: number, bytesDone: number, errors: DirTransferResult['errors'], filesFailed: number): DirTransferResult => ({
+      filesTransferred: filesDone,
+      filesFailed,
+      bytesTransferred: bytesDone,
+      errors,
+      cancelled,
     });
+
+    // Phase 2: ensure remote root + every intermediate dir for the file set.
+    if (options.cancelled?.()) return emptyResult(true, 0, 0, [], 0);
+    await this.run(async () => {
+      const ex = await this.client.exists(remoteDir);
+      if (!ex) await this.client.mkdir(remoteDir, true);
+    });
+
+    const remoteDirs = new Set<string>();
+    for (const f of files) {
+      const parts = f.relPath.split('/');
+      parts.pop(); // file name
+      let cur = remoteDir;
+      for (const p of parts) {
+        cur = joinRemote(cur, p);
+        remoteDirs.add(cur);
+      }
+    }
+    for (const d of [...remoteDirs].sort()) {
+      if (options.cancelled?.()) return emptyResult(true, 0, 0, [], 0);
+      await this.run(async () => {
+        const ex = await this.client.exists(d);
+        if (!ex) await this.client.mkdir(d, true);
+      });
+    }
+
+    // Phase 3: upload each file. Cancel is polled between files.
+    let filesDone = 0;
+    let bytesDone = 0;
+    let filesFailed = 0;
+    const errors: DirTransferResult['errors'] = [];
+
+    options.progress?.({ filesDone, filesTotal: files.length, bytesDone, bytesTotal, currentFile: '' });
+
+    for (const f of files) {
+      if (options.cancelled?.()) {
+        return emptyResult(true, filesDone, bytesDone, errors, filesFailed);
+      }
+      options.progress?.({
+        filesDone,
+        filesTotal: files.length,
+        bytesDone,
+        bytesTotal,
+        currentFile: f.relPath,
+      });
+      const remotePath = joinRemote(remoteDir, f.relPath);
+      try {
+        await this.run(() => this.client.fastPut(f.localAbs, remotePath));
+        filesDone++;
+        bytesDone += f.size;
+      } catch (e: any) {
+        filesFailed++;
+        errors.push({ relPath: f.relPath, error: e?.message || String(e) });
+      }
+    }
+
+    options.progress?.({ filesDone, filesTotal: files.length, bytesDone, bytesTotal, currentFile: '' });
+    return emptyResult(false, filesDone, bytesDone, errors, filesFailed);
   }
 
-  /** Download a whole remote directory to local, recursively. */
-  async downloadDir(remoteDir: string, localDir: string): Promise<void> {
-    return this.run(async () => {
-      fs.mkdirSync(localDir, { recursive: true });
-      await this.client.downloadDir(remoteDir, localDir);
+  /**
+   * Download a remote directory recursively, file-by-file. Mirror of uploadDir;
+   * see that method's doc for the rationale.
+   */
+  async downloadDir(
+    remoteDir: string,
+    localDir: string,
+    options: DirTransferOptions = {},
+  ): Promise<DirTransferResult> {
+    const exclude = options.exclude ?? (() => false);
+
+    // Phase 1: walk remote (SFTP list per directory). Counted as part of the
+    // operation but we do not surface separate progress for this phase — most
+    // trees enumerate in well under a second.
+    const files: RemoteFileForDownload[] = [];
+    await this.walkRemoteForDownload(remoteDir, '', exclude, files, options);
+    const bytesTotal = files.reduce((s, f) => s + f.size, 0);
+
+    const emptyResult = (cancelled: boolean, filesDone: number, bytesDone: number, errors: DirTransferResult['errors'], filesFailed: number): DirTransferResult => ({
+      filesTransferred: filesDone,
+      filesFailed,
+      bytesTransferred: bytesDone,
+      errors,
+      cancelled,
     });
+
+    if (options.cancelled?.()) return emptyResult(true, 0, 0, [], 0);
+
+    // Phase 2: ensure local root exists.
+    fs.mkdirSync(localDir, { recursive: true });
+
+    // Phase 3: download each file. Cancel polled between files.
+    let filesDone = 0;
+    let bytesDone = 0;
+    let filesFailed = 0;
+    const errors: DirTransferResult['errors'] = [];
+
+    options.progress?.({ filesDone, filesTotal: files.length, bytesDone, bytesTotal, currentFile: '' });
+
+    for (const f of files) {
+      if (options.cancelled?.()) {
+        return emptyResult(true, filesDone, bytesDone, errors, filesFailed);
+      }
+      options.progress?.({
+        filesDone,
+        filesTotal: files.length,
+        bytesDone,
+        bytesTotal,
+        currentFile: f.relPath,
+      });
+      const localAbs = path.join(localDir, ...f.relPath.split('/'));
+      try {
+        fs.mkdirSync(path.dirname(localAbs), { recursive: true });
+        await this.run(() => this.client.fastGet(f.remoteAbs, localAbs));
+        filesDone++;
+        bytesDone += f.size;
+      } catch (e: any) {
+        filesFailed++;
+        errors.push({ relPath: f.relPath, error: e?.message || String(e) });
+      }
+    }
+
+    options.progress?.({ filesDone, filesTotal: files.length, bytesDone, bytesTotal, currentFile: '' });
+    return emptyResult(false, filesDone, bytesDone, errors, filesFailed);
   }
 
   async readBuffer(remotePath: string): Promise<Buffer> {
@@ -111,6 +277,68 @@ export class SftpService {
       if (typeof data === 'string') return Buffer.from(data);
       throw new Error('Unexpected get() return type');
     });
+  }
+
+  // ---- walkers (private, no progress; the caller drives a per-file progress callback) ----
+
+  private walkLocalForUpload(
+    base: string,
+    rel: string,
+    exclude: (relPath: string) => boolean,
+    out: LocalFileForUpload[],
+  ): void {
+    const dir = path.join(base, rel);
+    let entries: fs.Dirent[];
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const e of entries) {
+      const childRel = rel ? `${rel}/${e.name}` : e.name;
+      if (exclude(childRel)) continue;
+      const childAbs = path.join(base, childRel);
+      if (e.isDirectory()) {
+        this.walkLocalForUpload(base, childRel, exclude, out);
+      } else if (e.isFile()) {
+        try {
+          const st = fs.statSync(childAbs);
+          out.push({ relPath: childRel, localAbs: childAbs, size: st.size });
+        } catch {
+          // unreadable file — skip silently
+        }
+      }
+      // symlinks deliberately skipped
+    }
+  }
+
+  private async walkRemoteForDownload(
+    base: string,
+    rel: string,
+    exclude: (relPath: string) => boolean,
+    out: RemoteFileForDownload[],
+    options: DirTransferOptions,
+  ): Promise<void> {
+    if (options.cancelled?.()) return;
+    const dir = rel ? joinRemote(base, rel) : base;
+    let entries: RemoteEntry[];
+    try {
+      entries = await this.list(dir);
+    } catch {
+      return;
+    }
+    for (const e of entries) {
+      if (options.cancelled?.()) return;
+      const childRel = rel ? `${rel}/${e.name}` : e.name;
+      if (exclude(childRel)) continue;
+      const childAbs = joinRemote(base, childRel);
+      if (e.type === 'd') {
+        await this.walkRemoteForDownload(base, childRel, exclude, out, options);
+      } else if (e.type === '-') {
+        out.push({ relPath: childRel, remoteAbs: childAbs, size: e.size });
+      }
+      // symlinks deliberately skipped
+    }
   }
 
   // ---- transparent reconnect plumbing ----
@@ -190,4 +418,9 @@ export class SftpService {
       || msg.includes('channel open failure')
       || msg.includes('socket hang up');
   }
+}
+
+function joinRemote(base: string, rel: string): string {
+  if (!rel) return base;
+  return base.endsWith('/') ? base + rel : base + '/' + rel;
 }
