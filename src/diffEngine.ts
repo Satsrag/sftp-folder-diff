@@ -9,6 +9,7 @@ export type DiffStatus = 'localOnly' | 'remoteOnly' | 'modified';
 export interface DiffEntry {
   relPath: string;       // posix style, relative
   status: DiffStatus;
+  targetKey: string;     // identifies which Target this entry belongs to
   localAbs?: string;     // absolute local fs path
   remoteAbs?: string;    // absolute remote posix path
   localSize?: number;
@@ -26,6 +27,7 @@ export class DiffEngine {
   private matcher: GlobMatcher;
   constructor(
     private sftp: SftpService,
+    private targetKey: string,
     private localBase: string,
     private remoteBase: string,
     ignore: string[],
@@ -92,6 +94,7 @@ export class DiffEngine {
         results.push({
           relPath: rel,
           status: 'localOnly',
+          targetKey: this.targetKey,
           localAbs: lf.abs,
           remoteAbs: this.joinRemote(this.remoteBase, rel),
           localSize: lf.size,
@@ -118,6 +121,7 @@ export class DiffEngine {
         results.push({
           relPath: rel,
           status: 'modified',
+          targetKey: this.targetKey,
           localAbs: lf.abs,
           remoteAbs: rf.abs,
           localSize: lf.size,
@@ -134,6 +138,7 @@ export class DiffEngine {
         results.push({
           relPath: rel,
           status: 'remoteOnly',
+          targetKey: this.targetKey,
           remoteAbs: rf.abs,
           localAbs: path.join(this.localBase, rel),
           remoteSize: rf.size,

@@ -287,7 +287,7 @@ async function compareCmd(subFolderAbs?: string) {
     },
     async (progress, token) => {
       progress.report({ message: '🔌 Connecting...' });
-      const engine = new DiffEngine(conn, localBase, remoteBase, exclude, mode);
+      const engine = new DiffEngine(conn, '', localBase, remoteBase, exclude, mode);
       try {
         const result = await engine.run(
           (msg) => progress.report({ message: msg }),
