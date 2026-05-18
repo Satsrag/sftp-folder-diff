@@ -203,16 +203,18 @@ The notification includes `(scope: src/components)` so you can confirm the range
 | 命令面板 → `SFTP Diff: Compare Folders Now` / Command Palette → `SFTP Diff: Compare Folders Now` | 同上 / Same as above |
 | 资源管理器右键文件夹 → `Compare This Folder` / Explorer right-click folder → `Compare This Folder` | 仅该子目录 / That subfolder only |
 
-### 两种比较模式 / Two compare modes
+### 三种比较模式 / Three compare modes
 
-切换:标题栏 ⚙️ 图标,或命令 `Toggle Compare Mode`,或设置 `sftpFolderDiff.compareMode`。
+切换:标题栏 ⚙️ 图标循环 `fast → smart → content → fast`,或命令 `Toggle Compare Mode`,或设置 `sftpFolderDiff.compareMode`。
 
-Switch via: title bar ⚙️ icon, command `Toggle Compare Mode`, or setting `sftpFolderDiff.compareMode`.
+Switch via: title bar ⚙️ icon (cycles `fast → smart → content → fast`), command `Toggle Compare Mode`, or setting `sftpFolderDiff.compareMode`.
 
-- **fast**(默认):按大小 + mtime,秒级,适合常规检查
-  **fast** (default): by size + mtime, seconds-scale, suited for routine checks
-- **content**:下载远程做 SHA-256,精确,慢,适合 mtime 不可靠的场景(部署后 mtime 全被重置)
-  **content**: downloads remote files for SHA-256, accurate but slow — use when mtime is unreliable (e.g. mtime gets reset after every deploy)
+- **fast**:仅按大小 + mtime,秒级,假如部署/checkout 重置了 mtime 会把内容一致的文件误判成 modified
+  **fast**: size + mtime only, seconds-scale; will false-positive identical files as modified when deploys / checkouts reset mtime
+- **smart**(默认,推荐):先按 size + mtime 判,size 不同直接 modified;size 同 + mtime 同直接判一致;只有 size 同但 mtime 漂时才下载 hash 验证。大部分文件走快路径,少数靠 hash 兜底
+  **smart** (default, recommended): size + mtime first; size mismatch → modified instantly; size + mtime both agree → trusted as identical; only size-equal-but-mtime-drift files fall back to SHA-256. Fast path for the common case, hash safety net for the rest
+- **content**:无论 mtime,size 一致就 hash 双方比对。最准,最慢
+  **content**: regardless of mtime, hash both sides whenever sizes match. Most accurate, slowest
 
 ### 状态标记 / Status badges
 
@@ -268,7 +270,7 @@ To open: 📋 icon in the tree view title bar, or command `SFTP Diff: Show as Ta
 | `SFTP Diff: Compare Folders Now` | 比较整个 localPath ↔ remotePath / Compare the whole localPath ↔ remotePath |
 | `SFTP Diff: Compare This Folder` | 比较右键选中的子目录(也可命令面板调用 — 但需 URI) / Compare a right-clicked subfolder (callable from Command Palette too — needs a URI) |
 | `SFTP Diff: Show as Table` | 打开 WebView 表格视图 / Open the WebView table view |
-| `SFTP Diff: Toggle Compare Mode (Fast/Content)` | 切换比较模式 / Toggle compare mode |
+| `SFTP Diff: Toggle Compare Mode (Fast/Smart/Content)` | 循环切换比较模式 / Cycle through compare modes |
 | `SFTP Diff: Clear Session Password` | 清掉内存里的临时密码并断开连接 / Clear the in-memory temporary password and disconnect |
 
 ---
@@ -279,7 +281,7 @@ To open: 📋 icon in the tree view title bar, or command `SFTP Diff: Show as Ta
 
 `Ctrl+,` and search `sftpFolderDiff`:
 
-- **`sftpFolderDiff.compareMode`**:`fast` / `content`
+- **`sftpFolderDiff.compareMode`**:`fast` / `smart` / `content`(默认 `smart` / default `smart`)
 - **`sftpFolderDiff.ignore`**:全局 exclude 规则(被 sftp-diff.json 的 `exclude` 覆盖)
   **`sftpFolderDiff.ignore`**: global exclude rules (overridden by the `exclude` field in sftp-diff.json)
 
@@ -304,13 +306,13 @@ A: An empty remote scan means all local files show as `L only`. This is the expe
 
 **Q: 比较慢?**
 **Q: Compare is slow?**
-A: 检查模式是不是 `content`(每个候选文件都要下载哈希)。改回 `fast` 模式;并把 `node_modules` 等大目录加进 `exclude`。
-A: Check whether mode is `content` (every candidate file gets downloaded and hashed). Switch back to `fast`, and add big directories like `node_modules` to `exclude`.
+A: 检查模式是不是 `content`(每个候选文件都要下载哈希)。改回默认的 `smart` 模式(只在 mtime 漂时才 hash),或者用 `fast`(完全跳过 hash);并把 `node_modules` 等大目录加进 `exclude`。
+A: Check whether mode is `content` (every candidate file gets downloaded and hashed). Switch back to the default `smart` (only hashes when mtime drifts) or use `fast` (skips hashing entirely), and add big directories like `node_modules` to `exclude`.
 
 **Q: 文件 mtime 两边不一致但内容一样?**
 **Q: A file has different mtimes on both sides but identical contents?**
-A: fast 模式会判 modified。切到 content 模式。
-A: `fast` mode will flag it as modified. Switch to `content` mode.
+A: fast 模式会判 modified。用默认的 smart 模式即可 —— 它会自动在 mtime 漂的时候 hash 验证。
+A: `fast` mode will flag it as modified. Use the default `smart` mode — it auto-hashes when mtime drifts, so identical contents won't be flagged.
 
 **Q: 想撤销升级?**
 **Q: How do I roll back to a previous version?**

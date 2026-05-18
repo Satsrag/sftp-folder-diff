@@ -2,6 +2,22 @@
 
 All notable changes are documented here. This project loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.7.0] – 2026-05-18
+
+### Added
+- **`smart` compare mode** (new default) — combines `fast` and `content`: size mismatch → modified immediately (no hash); size + mtime both agree → trusted as identical (no hash); size matches but mtime drifts → SHA-256 hash to confirm. Eliminates the false-positive "modified" entries from `fast` mode when deploy scripts / `git checkout` / FS-precision differences shift mtime on identical files, without paying the full content-mode cost for every file.
+- Toggle command now cycles **fast → smart → content → fast**.
+
+### Changed
+- Default `sftpFolderDiff.compareMode` is now `smart` (was `fast`). Existing workspaces with the setting explicitly set are unaffected.
+
+### Fixed
+- **SFTP connection survives idle disconnects.** Long compares or follow-up actions used to fail with "no sftp connection" after the SSH session was reaped by the server. The wrapper now:
+  - sends a keepalive every 30 s (`keepaliveInterval`) so live sessions don't get reaped in the first place;
+  - listens for `close` / `end` / `error` events and marks itself disconnected;
+  - transparently reconnects + retries any op once on a disconnect-shaped error (`ECONNRESET`, `ETIMEDOUT`, `not connected`, etc.);
+  - single-flights the reconnect so concurrent ops share one attempt.
+
 ## [0.6.0] – 2026-05-14
 
 ### Added

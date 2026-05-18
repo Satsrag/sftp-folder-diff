@@ -17,7 +17,7 @@ export interface DiffEntry {
   remoteMtime?: number;
 }
 
-type CompareMode = 'fast' | 'content';
+type CompareMode = 'fast' | 'smart' | 'content';
 
 interface LocalFile { relPath: string; abs: string; size: number; mtime: number; }
 interface RemoteFile { relPath: string; abs: string; size: number; mtime: number; }
@@ -139,13 +139,16 @@ export class DiffEngine {
   }
 
   private async filesEqual(lf: LocalFile, rf: RemoteFile): Promise<boolean> {
-    if (this.mode === 'fast') {
-      if (lf.size !== rf.size) return false;
-      // mtime in ms; allow 2s drift
-      return Math.abs(lf.mtime - rf.mtime) < 2000;
-    }
-    // content mode
+    // size mismatch ⇒ definitely different, in any mode
     if (lf.size !== rf.size) return false;
+
+    // mtime in ms; allow 2s drift
+    const mtimeClose = Math.abs(lf.mtime - rf.mtime) < 2000;
+
+    if (this.mode === 'fast') return mtimeClose;
+    // smart: trust size+mtime when both agree, fall through to hash on drift
+    if (this.mode === 'smart' && mtimeClose) return true;
+
     const [lh, rh] = await Promise.all([
       this.hashLocal(lf.abs),
       this.hashRemote(rf.abs),

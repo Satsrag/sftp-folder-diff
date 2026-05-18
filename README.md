@@ -7,9 +7,11 @@ A VSCode extension that compares an **entire local folder** against a **remote S
 ## Features
 
 - **Recursive directory comparison** — local workspace ↔ remote SFTP folder, in one pass
-- **Two compare modes**
-  - `fast` — by size + mtime (seconds, even on large trees)
-  - `content` — by SHA-256 hash (accurate, slower; downloads remote files for hashing)
+- **Three compare modes**
+  - `fast` — by size + mtime only (seconds, even on large trees; may flag identical files as modified when mtime drifts)
+  - `smart` *(default)* — size + mtime first; falls back to SHA-256 only when mtime drifts. Fast for the common case, accurate for the rest
+  - `content` — by SHA-256 hash unconditionally (accurate, slower; downloads remote files for hashing)
+- **Auto-reconnect** — survives idle SFTP disconnects with a keepalive + transparent retry, so long compares and follow-up actions don't fail mid-run
 - **Two views**, sharing the same diff data
   - Sidebar tree view (like Git Source Control)
   - WebView table view with size/mtime side-by-side, color badges, live path filter
@@ -26,7 +28,7 @@ A VSCode extension that compares an **entire local folder** against a **remote S
 
 1. Install the `.vsix` from [Releases](../../releases)
    ```bash
-   code --install-extension sftp-folder-diff-0.6.0.vsix
+   code --install-extension sftp-folder-diff-0.7.0.vsix
    ```
 2. Open your local project
 3. Run command `SFTP Diff: Configure Connection`, fill in `.vscode/sftp-diff.json`
@@ -61,7 +63,7 @@ See [`USAGE.md`](./USAGE.md) for full docs, all commands, all settings, exclude 
 | `SFTP Diff: Compare Folders Now` | Compare whole `localPath` ↔ `remotePath` |
 | `SFTP Diff: Compare This Folder` | (Right-click) compare a subfolder only |
 | `SFTP Diff: Show as Table` | Open WebView table view |
-| `SFTP Diff: Toggle Compare Mode` | Switch fast ↔ content |
+| `SFTP Diff: Toggle Compare Mode` | Cycle through fast → smart → content |
 | `SFTP Diff: Clear Session Password` | Wipe the in-memory password |
 | `SFTP: Diff This File with Remote` | (Right-click file or editor) |
 | `SFTP: Upload This File to Remote` | Same |

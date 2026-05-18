@@ -276,7 +276,7 @@ async function compareCmd(subFolderAbs?: string) {
   const exclude = getEffectiveExclude(cfg);
   const mode = vscode.workspace
     .getConfiguration('sftpFolderDiff')
-    .get<'fast' | 'content'>('compareMode', 'fast');
+    .get<'fast' | 'smart' | 'content'>('compareMode', 'smart');
 
   await vscode.window.withProgress(
     {
@@ -536,8 +536,9 @@ async function downloadFolderCmd(uri?: vscode.Uri) {
 
 async function toggleModeCmd() {
   const cfg = vscode.workspace.getConfiguration('sftpFolderDiff');
-  const cur = cfg.get<'fast' | 'content'>('compareMode', 'fast');
-  const next = cur === 'fast' ? 'content' : 'fast';
+  const order = ['fast', 'smart', 'content'] as const;
+  const cur = cfg.get<typeof order[number]>('compareMode', 'smart');
+  const next = order[(order.indexOf(cur) + 1) % order.length];
   await cfg.update('compareMode', next, vscode.ConfigurationTarget.Workspace);
   vscode.window.showInformationMessage(`Compare mode: ${next}`);
 }

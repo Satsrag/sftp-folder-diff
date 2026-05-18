@@ -2,7 +2,7 @@
   "name": "sftp-folder-diff",
   "displayName": "SFTP Folder Diff",
   "description": "Compare an entire local folder against a remote SFTP folder, view diffs, upload/download/delete files.",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "publisher": "satsrag",
   "repository": {
     "type": "git",
@@ -55,7 +55,7 @@
       },
       {
         "command": "sftpFolderDiff.toggleMode",
-        "title": "SFTP Diff: Toggle Compare Mode (Fast/Content)",
+        "title": "SFTP Diff: Toggle Compare Mode (Fast/Smart/Content)",
         "icon": "$(settings-gear)"
       },
       {
@@ -166,9 +166,9 @@
       "properties": {
         "sftpFolderDiff.compareMode": {
           "type": "string",
-          "enum": ["fast", "content"],
-          "default": "fast",
-          "description": "fast = compare by size + mtime; content = compare by SHA-256 hash"
+          "enum": ["fast", "smart", "content"],
+          "default": "smart",
+          "description": "fast = size + mtime (may flag identical files when mtime drifts); smart = size + mtime, but fall back to SHA-256 when mtime differs (recommended); content = always SHA-256, accurate but slow"
         },
         "sftpFolderDiff.ignore": {
           "type": "array",
