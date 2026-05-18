@@ -21,9 +21,17 @@
         "title": "SFTP Diff: Configure Connection"
       },
       {
-        "command": "sftpFolderDiff.compare",
-        "title": "SFTP Diff: Compare Folders Now",
+        "command": "sftpFolderDiff.compareTarget",
+        "title": "SFTP Diff: Compare This Target",
         "icon": "$(refresh)"
+      },
+      {
+        "command": "sftpFolderDiff.clearTargetDiff",
+        "title": "SFTP Diff: Clear Diff for This Target"
+      },
+      {
+        "command": "sftpFolderDiff.disconnectTarget",
+        "title": "SFTP Diff: Disconnect This Target"
       },
       {
         "command": "sftpFolderDiff.compareFolder",
@@ -144,15 +152,17 @@
         { "command": "sftpFolderDiff.downloadFile", "group": "7_sftp@3" }
       ],
       "view/title": [
-        { "command": "sftpFolderDiff.compare", "when": "view == sftpFolderDiff.tree", "group": "navigation@1" },
         { "command": "sftpFolderDiff.toggleMode", "when": "view == sftpFolderDiff.tree", "group": "navigation@2" }
       ],
       "view/item/context": [
-        { "command": "sftpFolderDiff.openDiff", "when": "view == sftpFolderDiff.tree && viewItem =~ /modified|localOnly|remoteOnly/", "group": "inline@1" },
-        { "command": "sftpFolderDiff.upload", "when": "view == sftpFolderDiff.tree && viewItem =~ /modified|localOnly/", "group": "inline@2" },
-        { "command": "sftpFolderDiff.download", "when": "view == sftpFolderDiff.tree && viewItem =~ /modified|remoteOnly/", "group": "inline@3" },
-        { "command": "sftpFolderDiff.deleteLocal", "when": "view == sftpFolderDiff.tree && viewItem == localOnly", "group": "1_modification" },
-        { "command": "sftpFolderDiff.deleteRemote", "when": "view == sftpFolderDiff.tree && viewItem == remoteOnly", "group": "1_modification" }
+        { "command": "sftpFolderDiff.compareTarget",    "when": "view == sftpFolderDiff.tree && viewItem == targetRoot",                                "group": "inline@1" },
+        { "command": "sftpFolderDiff.clearTargetDiff",  "when": "view == sftpFolderDiff.tree && viewItem == targetRoot",                                "group": "1_modification@1" },
+        { "command": "sftpFolderDiff.disconnectTarget", "when": "view == sftpFolderDiff.tree && viewItem == targetRoot",                                "group": "1_modification@2" },
+        { "command": "sftpFolderDiff.openDiff",         "when": "view == sftpFolderDiff.tree && viewItem =~ /modified|localOnly|remoteOnly/",           "group": "inline@1" },
+        { "command": "sftpFolderDiff.upload",           "when": "view == sftpFolderDiff.tree && viewItem =~ /modified|localOnly/",                      "group": "inline@2" },
+        { "command": "sftpFolderDiff.download",         "when": "view == sftpFolderDiff.tree && viewItem =~ /modified|remoteOnly/",                     "group": "inline@3" },
+        { "command": "sftpFolderDiff.deleteLocal",      "when": "view == sftpFolderDiff.tree && viewItem == localOnly",                                 "group": "1_modification" },
+        { "command": "sftpFolderDiff.deleteRemote",     "when": "view == sftpFolderDiff.tree && viewItem == remoteOnly",                                "group": "1_modification" }
       ]
     },
     "configuration": {
