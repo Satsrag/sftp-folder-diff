@@ -34,7 +34,14 @@ export class DiffEngine {
     this.matcher = new GlobMatcher(ignore);
   }
 
-  async run(progress: (msg: string) => void): Promise<DiffEntry[]> {
+  async run(
+    progress: (msg: string) => void,
+    cancelled: () => boolean = () => false,
+  ): Promise<DiffEntry[]> {
+    const ensureNotCancelled = () => {
+      if (cancelled()) throw new Error('cancelled');
+    };
+
     // Phase 1: local scan
     progress('📂 Scanning local files...');
     let localDirCount = 0;
@@ -48,7 +55,8 @@ export class DiffEngine {
         lastTick = now;
       }
     };
-    const localFiles = await this.walkLocal(this.localBase, '', localTick);
+    const localFiles = await this.walkLocal(this.localBase, '', localTick, ensureNotCancelled);
+    ensureNotCancelled();
     progress(`✓ Local: ${localFiles.length} files. Now scanning remote...`);
 
     // Phase 2: remote scan
@@ -63,7 +71,8 @@ export class DiffEngine {
         lastTick = now;
       }
     };
-    const remoteFiles = await this.walkRemote(this.remoteBase, '', remoteTick);
+    const remoteFiles = await this.walkRemote(this.remoteBase, '', remoteTick, ensureNotCancelled);
+    ensureNotCancelled();
     progress(`✓ Remote: ${remoteFiles.length} files. Comparing...`);
 
     const localMap = new Map(localFiles.map(f => [f.relPath, f]));
@@ -76,6 +85,7 @@ export class DiffEngine {
 
     // local-only and modified
     for (const [rel, lf] of localMap) {
+      ensureNotCancelled();
       checked++;
       const rf = remoteMap.get(rel);
       if (!rf) {
@@ -175,6 +185,7 @@ export class DiffEngine {
     base: string,
     rel: string,
     tick?: (isDir: boolean) => void,
+    onCancel?: () => void,
   ): Promise<LocalFile[]> {
     const out: LocalFile[] = [];
     const dir = path.join(base, rel);
@@ -186,11 +197,12 @@ export class DiffEngine {
     }
     if (tick) tick(true);
     for (const e of entries) {
+      if (onCancel) onCancel();
       const childRel = rel ? `${rel}/${e.name}` : e.name;
       if (this.matcher.ignores(childRel)) continue;
       const childAbs = path.join(base, childRel);
       if (e.isDirectory()) {
-        out.push(...await this.walkLocal(base, childRel, tick));
+        out.push(...await this.walkLocal(base, childRel, tick, onCancel));
       } else if (e.isFile()) {
         const st = fs.statSync(childAbs);
         out.push({
@@ -209,6 +221,7 @@ export class DiffEngine {
     base: string,
     rel: string,
     tick?: (isDir: boolean) => void,
+    onCancel?: () => void,
   ): Promise<RemoteFile[]> {
     const out: RemoteFile[] = [];
     const dir = this.joinRemote(base, rel);
@@ -220,11 +233,12 @@ export class DiffEngine {
     }
     if (tick) tick(true);
     for (const e of entries) {
+      if (onCancel) onCancel();
       const childRel = rel ? `${rel}/${e.name}` : e.name;
       if (this.matcher.ignores(childRel)) continue;
       const childAbs = this.joinRemote(base, childRel);
       if (e.type === 'd') {
-        out.push(...await this.walkRemote(base, childRel, tick));
+        out.push(...await this.walkRemote(base, childRel, tick, onCancel));
       } else if (e.type === '-') {
         out.push({
           relPath: childRel,

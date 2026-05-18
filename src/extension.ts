@@ -278,20 +278,39 @@ async function compareCmd(subFolderAbs?: string) {
     .getConfiguration('sftpFolderDiff')
     .get<'fast' | 'smart' | 'content'>('compareMode', 'smart');
 
+  let cancelled = false;
   await vscode.window.withProgress(
     {
       location: vscode.ProgressLocation.Notification,
       title: `SFTP Diff${scopeNote} · ${mode} mode`,
-      cancellable: false,
+      cancellable: true,
     },
-    async (progress) => {
+    async (progress, token) => {
       progress.report({ message: '🔌 Connecting...' });
       const engine = new DiffEngine(conn, localBase, remoteBase, exclude, mode);
-      lastDiff = await engine.run((msg) => progress.report({ message: msg }));
-      treeProvider.setData(lastDiff, localBase, remoteBase);
-      DiffWebviewPanel.refresh(lastDiff);
+      try {
+        const result = await engine.run(
+          (msg) => progress.report({ message: msg }),
+          () => token.isCancellationRequested,
+        );
+        lastDiff = result;
+        treeProvider.setData(lastDiff, localBase, remoteBase);
+        DiffWebviewPanel.refresh(lastDiff);
+      } catch (e: any) {
+        if (token.isCancellationRequested) {
+          cancelled = true;
+          return;
+        }
+        throw e;
+      }
     }
   );
+  if (cancelled) {
+    vscode.window.showInformationMessage(`Diff cancelled${scopeNote}. Previous results kept.`);
+    return;
+  }
+  // Auto-reveal the sidebar so the user sees results without an extra click.
+  await vscode.commands.executeCommand('sftpFolderDiff.tree.focus');
   const summary = summarizeDiff(lastDiff);
   vscode.window.showInformationMessage(
     `Diff done${scopeNote}: ${summary}`
